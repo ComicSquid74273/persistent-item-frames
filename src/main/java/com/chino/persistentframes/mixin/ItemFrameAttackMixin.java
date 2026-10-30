@@ -1,5 +1,6 @@
 package com.chino.persistentframes.mixin;
 
+import com.chino.persistentframes.InteractionTracker;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -19,14 +20,14 @@ public abstract class ItemFrameAttackMixin {
     @Inject(method = "attack", at = @At("HEAD"))
     private void onAttack(Player player, Entity entity, CallbackInfo ci) {
         if (entity instanceof ItemFrame itemFrame) {
-            PersistentFramesMixin.registerPendingInteraction(itemFrame.getId());
+            InteractionTracker.registerPendingInteraction(itemFrame.getId());
         }
     }
 
     @Inject(method = "interact", at = @At("HEAD"))
     private void onInteract(Player player, Entity entity, EntityHitResult hitResult, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
         if (entity instanceof ItemFrame itemFrame) {
-            PersistentFramesMixin.registerPendingInteraction(itemFrame.getId());
+            InteractionTracker.registerPendingInteraction(itemFrame.getId());
         }
     }
 }

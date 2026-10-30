@@ -1,5 +1,6 @@
 package com.chino.persistentframes.mixin;
 
+import com.chino.persistentframes.InteractionTracker;
 import it.unimi.dsi.fastutil.ints.IntList;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.ints.IntSet;
@@ -13,7 +14,7 @@ import net.minecraft.network.protocol.game.*;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -43,17 +44,10 @@ public abstract class PersistentFramesMixin {
     private static final Map<Vec3, Long> RECENT_BREAK_POSITIONS = new ConcurrentHashMap<>();
 
     @Unique
-    private static final Map<Integer, Long> PENDING_INTERACTIONS = new ConcurrentHashMap<>();
-
-    @Unique
     private static final long BREAK_EVENT_TIMEOUT_MS = 1500L;
 
     @Unique
     private static final long INTERACTION_TIMEOUT_MS = 500L;
-
-    public static void registerPendingInteraction(int entityId) {
-        PENDING_INTERACTIONS.put(entityId, System.currentTimeMillis());
-    }
 
     @Unique
     private static boolean isFrameBreakSound(Holder<SoundEvent> soundHolder) {
@@ -109,11 +103,11 @@ public abstract class PersistentFramesMixin {
 
     @Unique
     private void cleanupUnacknowledgedInteractions() {
-        if (PENDING_INTERACTIONS.isEmpty() || this.level == null) {
+        if (InteractionTracker.PENDING_INTERACTIONS.isEmpty() || this.level == null) {
             return;
         }
         long now = System.currentTimeMillis();
-        for (Iterator<Map.Entry<Integer, Long>> it = PENDING_INTERACTIONS.entrySet().iterator(); it.hasNext(); ) {
+        for (Iterator<Map.Entry<Integer, Long>> it = InteractionTracker.PENDING_INTERACTIONS.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<Integer, Long> entry = it.next();
             if (now - entry.getValue() > INTERACTION_TIMEOUT_MS) {
                 int entityId = entry.getKey();
@@ -129,12 +123,12 @@ public abstract class PersistentFramesMixin {
 
     @Inject(method = "handleSetEntityData", at = @At("HEAD"))
     private void onSetEntityData(ClientboundSetEntityDataPacket packet, CallbackInfo ci) {
-        PENDING_INTERACTIONS.remove(packet.id());
+        InteractionTracker.PENDING_INTERACTIONS.remove(packet.id());
     }
 
     @Inject(method = "handleHurtAnimation", at = @At("HEAD"))
     private void onHurtAnimation(ClientboundHurtAnimationPacket packet, CallbackInfo ci) {
-        PENDING_INTERACTIONS.remove(packet.id());
+        InteractionTracker.PENDING_INTERACTIONS.remove(packet.id());
     }
 
     @Inject(method = "handleSoundEvent", at = @At("HEAD"))
@@ -148,7 +142,7 @@ public abstract class PersistentFramesMixin {
     @Inject(method = "handleSoundEntityEvent", at = @At("HEAD"))
     private void onSoundEntityEvent(ClientboundSoundEntityPacket packet, CallbackInfo ci) {
         cleanupUnacknowledgedInteractions();
-        PENDING_INTERACTIONS.remove(packet.getId());
+        InteractionTracker.PENDING_INTERACTIONS.remove(packet.getId());
         if (isFrameBreakSound(packet.getSound())) {
             RECENT_BREAK_ENTITY_IDS.add(packet.getId());
         }
@@ -157,7 +151,7 @@ public abstract class PersistentFramesMixin {
     @Inject(method = "handleAddEntity", at = @At("HEAD"))
     private void onAddEntity(ClientboundAddEntityPacket packet, CallbackInfo ci) {
         cleanupUnacknowledgedInteractions();
-        if (packet.getType() == EntityType.ITEM) {
+        if (packet.getType() == EntityTypes.ITEM) {
             recordBreakPosition(packet.getX(), packet.getY(), packet.getZ());
         }
     }
