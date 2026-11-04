@@ -76,6 +76,14 @@
   * **If Real Frame (Protected or Normal)**: The server recognizes `target != null` and replies with `ClientboundSetEntityDataPacket`, `ClientboundHurtAnimationPacket`, or sound $\rightarrow$ Pending flag is cleared; frame stays intact or rotates.
   * **If Phantom Frame**: The server sees `target == null` and sends nothing. After **500 ms** with zero server response, the client cleanly discards the phantom entity.
 
+### Scenario 5: Render Gate on Uncompiled Chunk Sections (26.x render pipeline)
+* **Problem**: Since the 1.21.2+/26.x render refactor, `LevelExtractor.isEntityVisible` only extracts entities whose chunk section has a **compiled render mesh** (`LevelRenderer.isSectionCompiledAndVisible`). When the server unloads a chunk (low view distance), `ClientChunkCache.drop()` removes it; the preserved frame entity survives in `ClientLevel.entityStorage` (nothing in `handleForgetLevelChunk` removes entities), but its section has no mesh, so the frame is never extracted for rendering — it "vanishes" exactly at the server view-distance edge even though the mod preserved it.
+* **Interaction with chunk-cache mods**: Bobby (5.2.x) serves cached `FakeChunk`s on `getChunk()` queries and marks sections dirty, so where Bobby *has* cached data the section recompiles and frames render natively. Where Bobby has no cache — or with LOD-only mods like Distant Horizons, which draw approximate terrain outside the vanilla section pipeline — the section stays uncompiled and frames vanish.
+* **Our Solution ([`LevelExtractorMixin.java`](src/main/java/com/chino/persistentframes/mixin/LevelExtractorMixin.java))**:
+  * TAIL-inject `isEntityVisible`; when vanilla returned `false` and the entity is an `ItemFrame`, re-run only the frustum + render-distance checks (`entityRenderDispatcher().shouldRender`) and admit the frame. Item frames carry their own geometry and never depend on the chunk mesh, so this is safe. Occlusion-culled frames behind mountains may draw anyway (negligible overdraw).
+* **Lighting fallback ([`EntityRendererMixin.java`](src/main/java/com/chino/persistentframes/mixin/EntityRendererMixin.java))**:
+  * In chunks without served data, the light engine reports darkness → frames would render pitch black. If `getPackedLightCoords` returns 0 (block+sky both 0 — impossible in a loaded-but-dark chunk, whose section is compiled) *and* the frame's section is uncompiled, substitute sky light 15 (daylight; still dimmed by the vanilla lightmap at night). With Bobby serving a chunk, its saved light is used and the fallback never triggers.
+
 ---
 
 ## 4. Performance & Resource Footprint

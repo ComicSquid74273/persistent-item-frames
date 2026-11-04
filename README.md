@@ -35,6 +35,8 @@ To prevent "ghost" or phantom frames from lingering when things actually break:
 * **[Distant Horizons](https://modrinth.com/mod/distanthorizons)** — Simplified LOD terrain
 * Any multiplayer server with low entity tracking distances
 
+**Good to know (26.x, v1.1.2+):** frames keep rendering even where Bobby/Distant Horizons draw cached or LOD terrain instead of real chunks — including in chunks the server has fully unloaded. Two limits remain: the wall must have been within the server's view distance **once per game session** (frames aren't cached to disk), and vanilla's entity render range caps visibility — raise *Video Settings → Entity Distance* to see frames further out.
+
 ---
 
 ## Requirements & Installation
