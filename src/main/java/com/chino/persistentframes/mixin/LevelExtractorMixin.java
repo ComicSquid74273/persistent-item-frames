@@ -36,6 +36,7 @@ public abstract class LevelExtractorMixin {
         }
 
         if (this.levelRenderer.entityRenderDispatcher().shouldRender(entity, frustum, camX, camY, camZ)) {
+            com.chino.persistentframes.DebugLog.RENDER_BYPASS_RESCUES.incrementAndGet();
             cir.setReturnValue(true);
         }
     }

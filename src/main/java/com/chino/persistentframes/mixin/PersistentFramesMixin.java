@@ -1,5 +1,6 @@
 package com.chino.persistentframes.mixin;
 
+import com.chino.persistentframes.DebugLog;
 import com.chino.persistentframes.InteractionTracker;
 import it.unimi.dsi.fastutil.ints.IntList;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
@@ -156,6 +157,24 @@ public abstract class PersistentFramesMixin {
         }
     }
 
+    @Inject(method = "handleForgetLevelChunk", at = @At("HEAD"))
+    private void persistentItemFrames$onChunkForget(ClientboundForgetLevelChunkPacket packet, CallbackInfo ci) {
+        if (this.level == null) {
+            return;
+        }
+        int chunkX = packet.pos().x();
+        int chunkZ = packet.pos().z();
+        int frames = 0;
+        for (Entity entity : this.level.entitiesForRendering()) {
+            if (entity instanceof ItemFrame frame
+                    && frame.blockPosition().getX() >> 4 == chunkX
+                    && frame.blockPosition().getZ() >> 4 == chunkZ) {
+                frames++;
+            }
+        }
+        DebugLog.logForgottenChunk(chunkX, chunkZ, frames);
+    }
+
     @Inject(method = "handleRemoveEntities", at = @At("HEAD"), cancellable = true)
     private void onEntitiesDestroy(ClientboundRemoveEntitiesPacket packet, CallbackInfo ci) {
         cleanupUnacknowledgedInteractions();
@@ -194,12 +213,23 @@ public abstract class PersistentFramesMixin {
 
             if (entity instanceof ItemFrame itemFrame) {
                 // If the frame was legitimately broken (break sound, item drop, or player crosshair target)
-                if (wasRecentlyBroken(id, itemFrame.position()) || isPlayerTargeting(client, itemFrame)) {
+                if (wasRecentlyBroken(id, itemFrame.position())) {
+                    DebugLog.CULL_REMOVED_BREAK.incrementAndGet();
+                    DebugLog.beginOwnRemoval();
                     this.level.removeEntity(id, Entity.RemovalReason.DISCARDED);
+                    DebugLog.endOwnRemoval();
+                    continue;
+                }
+                if (isPlayerTargeting(client, itemFrame)) {
+                    DebugLog.CULL_REMOVED_AIM.incrementAndGet();
+                    DebugLog.beginOwnRemoval();
+                    this.level.removeEntity(id, Entity.RemovalReason.DISCARDED);
+                    DebugLog.endOwnRemoval();
                     continue;
                 }
 
                 // Server distance culling -> preserve the item frame in client memory!
+                DebugLog.CULL_PRESERVED.incrementAndGet();
                 continue;
             }
 

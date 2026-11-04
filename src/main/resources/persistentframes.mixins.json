@@ -6,7 +6,9 @@
     "PersistentFramesMixin",
     "ItemFrameAttackMixin",
     "LevelExtractorMixin",
-    "EntityRendererMixin"
+    "EntityRendererMixin",
+    "ItemFrameEntityMixin",
+    "MinecraftTickMixin"
   ],
   "injectors": {
     "defaultRequire": 1
