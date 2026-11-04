@@ -7,7 +7,8 @@
     "ItemFrameAttackMixin",
     "LevelExtractorMixin",
     "EntityRendererMixin",
-    "ItemFrameEntityMixin",
+    "EntityRemovalGuardMixin",
+    "ClientLevelMixin",
     "MinecraftTickMixin"
   ],
   "injectors": {

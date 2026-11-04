@@ -17,6 +17,9 @@ public final class PreservationGuard {
     /** Main-thread marker: removals the mod itself decided on (break sound / crosshair / phantom cleanup). */
     private static boolean ownRemovalInProgress;
 
+    /** Main-thread marker: active while ClientLevel.addEntity replaces an entity with the same id. */
+    private static boolean reAddInProgress;
+
     private static boolean bannerShown;
 
     private PreservationGuard() {
@@ -32,6 +35,18 @@ public final class PreservationGuard {
 
     public static boolean isOwnRemoval() {
         return ownRemovalInProgress;
+    }
+
+    public static void beginReAdd() {
+        reAddInProgress = true;
+    }
+
+    public static void endReAdd() {
+        reAddInProgress = false;
+    }
+
+    public static boolean isReAdd() {
+        return reAddInProgress;
     }
 
     /** Called by the guard mixin when an outside code path tried to discard a frame. */
