@@ -6,7 +6,7 @@
 
 ## 1. Executive Summary & Core Objective
 
-**Persistent Item Frames** is an ultra-lightweight client-side Fabric mod for Minecraft 26.x (and backward/forward compatible across modern versions). 
+**Persistent Item Frames** is an ultra-lightweight client-side Fabric mod. This branch targets **Minecraft 1.21.11** (the last obfuscated version — the production runtime uses intermediary names, so the built jar carries intermediary-remapped mixin annotations); the `main` branch targets unobfuscated 26.x.
 
 * **The Problem**: Minecraft servers aggressively cull entities outside their simulation / entity-tracking radius (often configured as low as 16–32 blocks on Spigot/Paper/Purpur to protect TPS when players place thousands of item frames on chests or map walls). When playing with extended client view distance mods ([Bobby](https://modrinth.com/mod/bobby), [Voxy](https://modrinth.com/mod/voxy), [Distant Horizons](https://modrinth.com/mod/distanthorizons)), terrain renders 64+ chunks away while all item frames prematurely vanish from view.
 * **The Goal**: Keep item frames rendered seamlessly in client memory across any distance without introducing memory leaks, ghost mobs, ghost frames on broken walls, or breaking server claim protections.
@@ -27,7 +27,7 @@
 ### Scenario 1: Multi-Entity Packet Bundling
 * **Problem**: The vanilla server frequently packs multiple entity IDs into a single `ClientboundRemoveEntitiesPacket` (e.g. 1 Item Frame + 3 Zombies leaving simulation range).
 * **Flawed Naive Solution**: Calling `ci.cancel()` on the entire packet prevented the Zombies from being removed, leaving static ghost mobs.
-* **Our Solution ([`PersistentFramesMixin.java`](file:///c:/Users/fitch/Not-backed-up/dev/GitHub/persistent-item-frames/src/main/java/com/chino/persistentframes/mixin/PersistentFramesMixin.java))**:
+* **Our Solution ([`PersistentFramesMixin.java`](src/main/java/com/chino/persistentframes/mixin/PersistentFramesMixin.java))**:
   1. Perform a fast-path scan: `if (!hasFrame) return;` (0 overhead for normal mob traffic).
   2. If an `ItemFrame` is present, call `ci.cancel()` and iterate through each entity ID individually.
   3. Non-frame entities (`!(entity instanceof ItemFrame)`) are explicitly removed via `this.level.removeEntity(id, Entity.RemovalReason.DISCARDED)`.
@@ -46,7 +46,7 @@
 * **Our Chosen Solution (Break Audio & Item Drops)**:
   * In vanilla Minecraft, in-world destruction **always calls `dropItem()`**, which **always broadcasts `SoundEvents.ITEM_FRAME_BREAK` or `GLOW_ITEM_FRAME_BREAK`** and/or spawns an `EntityType.ITEM` entity at the coordinate.
   * Distance culling **never** broadcasts break sounds or item drops.
-  * **Implementation**: We maintain a lightweight 1.5-second sliding window (`RECENT_BREAK_POSITIONS` and `RECENT_BREAK_ENTITY_IDS`). If a removal packet matches a recent break event, the frame is removed immediately.
+  * **Implementation**: We maintain a lightweight 1-second sliding window (`RECENT_BREAK_POSITIONS` and `RECENT_BREAK_ENTITY_IDS`). If a removal packet matches a recent break event (same entity id, or a drop position within 0.75 blocks of the frame), the frame is removed immediately.
 
 ---
 
@@ -72,19 +72,19 @@
     * In protected regions (WorldGuard, Towny, Spawn), the server cancels the punch. Eager deletion would make protected frames falsely vanish on the player's screen.
     * Punching a frame containing an item is supposed to pop the item out, not destroy the frame.
 * **Our Chosen Solution: Unified Server Acknowledgment Pipeline**:
-  * **On Left-Click (Attack) or Right-Click (Interact)**: Flag the entity ID in `PENDING_INTERACTIONS` via [`ItemFrameAttackMixin`](file:///c:/Users/fitch/Not-backed-up/dev/GitHub/persistent-item-frames/src/main/java/com/chino/persistentframes/mixin/ItemFrameAttackMixin.java).
+  * **On Left-Click (Attack) or Right-Click (Interact)**: Flag the entity ID in `PENDING_INTERACTIONS` via [`ItemFrameAttackMixin`](src/main/java/com/chino/persistentframes/mixin/ItemFrameAttackMixin.java).
   * **If Real Frame (Protected or Normal)**: The server recognizes `target != null` and replies with `ClientboundSetEntityDataPacket`, `ClientboundHurtAnimationPacket`, or sound $\rightarrow$ Pending flag is cleared; frame stays intact or rotates.
   * **If Phantom Frame**: The server sees `target == null` and sends nothing. After **500 ms** with zero server response, the client cleanly discards the phantom entity.
 
-### Scenario 5: Render Gate on Uncompiled Chunk Sections (26.x render pipeline)
-* **Problem**: Since the 1.21.2+/26.x render refactor, `LevelExtractor.isEntityVisible` only extracts entities whose chunk section has a **compiled render mesh** (`LevelRenderer.isSectionCompiledAndVisible`). When the server unloads a chunk (low view distance), `ClientChunkCache.drop()` removes it; the preserved frame entity survives in `ClientLevel.entityStorage` (nothing in `handleForgetLevelChunk` removes entities), but its section has no mesh, so the frame is never extracted for rendering — it "vanishes" exactly at the server view-distance edge even though the mod preserved it.
+### Scenario 5: Render Gate on Uncompiled Chunk Sections (1.21.11 render pipeline)
+* **Problem**: Since the 1.21.2+ render refactor, entities are only extracted for rendering when their chunk section has a **compiled render mesh**. In 1.21.11 the extraction lives inlined in `LevelRenderer#extractVisibleEntities(Camera, Frustum, DeltaTracker, LevelRenderState)`, which gates each entity on `isSectionCompiledAndVisible(entity.blockPosition())` after the frustum + render-distance checks. When the server unloads a chunk (low view distance), `ClientChunkCache.drop()` removes it; the preserved frame entity survives in `ClientLevel.entityStorage` (nothing in `handleForgetLevelChunk` removes entities), but its section has no mesh, so the frame is never extracted for rendering — it "vanishes" exactly at the server view-distance edge even though the mod preserved it.
 * **Interaction with chunk-cache mods**: Bobby (5.2.x) serves cached `FakeChunk`s on `getChunk()` queries and marks sections dirty, so where Bobby *has* cached data the section recompiles and frames render natively. Where Bobby has no cache — or with LOD-only mods like Distant Horizons, which draw approximate terrain outside the vanilla section pipeline — the section stays uncompiled and frames vanish.
-* **Our Solution ([`LevelExtractorMixin.java`](src/main/java/com/chino/persistentframes/mixin/LevelExtractorMixin.java))**:
-  * TAIL-inject `isEntityVisible`; when vanilla returned `false` and the entity is an `ItemFrame`, re-run only the frustum + render-distance checks (`entityRenderDispatcher().shouldRender`) and admit the frame. Item frames carry their own geometry and never depend on the chunk mesh, so this is safe. Occlusion-culled frames behind mountains may draw anyway (negligible overdraw).
+* **Our Solution ([`LevelRendererMixin.java`](src/main/java/com/chino/persistentframes/mixin/LevelRendererMixin.java))**:
+  * `@WrapOperation` on the single `isSectionCompiledAndVisible(BlockPos)` call inside `extractVisibleEntities` (its only caller): when the loop's entity (`@Local`) is an `ItemFrame`, the section-mesh gate passes unconditionally. The frustum + render-distance checks already ran earlier in the same loop iteration, so this admits exactly the frames the 26.x build re-admitted via `LevelExtractor.isEntityVisible`. Item frames carry their own geometry and never depend on the chunk mesh, so this is safe. Occlusion-culled frames behind mountains may draw anyway (negligible overdraw).
 * **Lighting fallback ([`EntityRendererMixin.java`](src/main/java/com/chino/persistentframes/mixin/EntityRendererMixin.java))**:
   * In chunks without served data, the light engine reports darkness → frames would render pitch black. If `getPackedLightCoords` returns 0 (block+sky both 0 — impossible in a loaded-but-dark chunk, whose section is compiled) *and* the frame's section is uncompiled, substitute sky light 15 (daylight; still dimmed by the vanilla lightmap at night). With Bobby serving a chunk, its saved light is used and the fallback never triggers.
 * **Culling-mod immunity (v1.1.3, same mixin)**: EntityCulling (1.11.x) hooks the entity *extraction* and, for "culled" entities, replaces the extracted render state with an invisible dummy — sitting **behind** our section-gate bypass, so it could still swallow preserved frames. It consults vanilla `EntityRenderer.affectedByCulling` to decide; returning `false` for `ItemFrame` makes both vanilla and EntityCulling exempt frames from culling entirely (vanilla's render-distance cap still applies — it is checked before this method).
-* **Removal guard ([`ItemFrameEntityMixin.java`](src/main/java/com/chino/persistentframes/mixin/ItemFrameEntityMixin.java), v1.1.3)**: every client-side removal path funnels through `Entity.setRemoved`. The mod cancels foreign `DISCARDED`/`KILLED` removals of frames (any mod, any unhandled packet path); only this mod's own decisions (break sounds, crosshair, phantom-interaction cleanup — marked via [`PreservationGuard`](src/main/java/com/chino/persistentframes/PreservationGuard.java)) and level-teardown reasons pass. The break-position heuristic was also tightened (0.75-block radius, 1 s window) so unrelated dropped items near a wall can no longer delete preserved frames.
+* **Removal guard ([`EntityRemovalGuardMixin.java`](src/main/java/com/chino/persistentframes/mixin/EntityRemovalGuardMixin.java), v1.1.3)**: every client-side removal path funnels through `Entity.setRemoved`. The mod cancels foreign `DISCARDED`/`KILLED` removals of frames (any mod, any unhandled packet path); only this mod's own decisions (break sounds, crosshair, phantom-interaction cleanup — marked via [`PreservationGuard`](src/main/java/com/chino/persistentframes/PreservationGuard.java)) and level-teardown reasons pass. The break-position heuristic was also tightened (0.75-block radius, 1 s window) so unrelated dropped items near a wall can no longer delete preserved frames.
 
 ---
 
@@ -92,8 +92,8 @@
 
 1. **CPU Overhead**:
    * **0** background threads.
-   * **0** per-tick game loop hooks.
-   * Execution occurs strictly inside packet listeners (`ClientPacketListener`), taking $< 1\ \mu\text{s}$ per packet.
+   * **1** per-tick hook: `MinecraftTickMixin` injects the tail of `Minecraft.tick` as a cheap one-shot early-return check for the startup banner.
+   * All frame-preservation logic executes inside packet listeners (`ClientPacketListener`) or the render extraction path, taking $< 1\ \mu\text{s}$ per packet.
 2. **Network Footprint**:
    * **0** outgoing packets generated. 100% passive client-side inspection.
 3. **Memory Footprint**:
@@ -106,9 +106,17 @@
 
 ```text
 persistent-item-frames/
-├── src/main/java/com/chino/persistentframes/mixin/
-│   ├── PersistentFramesMixin.java    # Packet interception, audio/drop tracking, removal logic
-│   └── ItemFrameAttackMixin.java      # Left/Right click interaction registration
+├── src/main/java/com/chino/persistentframes/
+│   ├── InteractionTracker.java        # Shared pending-interaction state (outside mixins)
+│   ├── PreservationGuard.java         # Own-removal/re-add markers, startup banner
+│   └── mixin/
+│       ├── PersistentFramesMixin.java  # Packet interception, audio/drop tracking, removal logic
+│       ├── ItemFrameAttackMixin.java   # Left/Right click interaction registration (attack/interactAt/interact)
+│       ├── LevelRendererMixin.java     # Section-mesh render gate bypass for frames (extractVisibleEntities)
+│       ├── EntityRendererMixin.java    # Culling immunity + daylight light fallback
+│       ├── EntityRemovalGuardMixin.java# Foreign-removal guard on Entity.setRemoved
+│       ├── ClientLevelMixin.java       # Re-add marker around ClientLevel.addEntity
+│       └── MinecraftTickMixin.java     # One-shot startup banner tick hook
 ├── src/main/resources/
 │   ├── fabric.mod.json               # Mod metadata, i18n descriptions, AFL-3.0 license
 │   ├── persistentframes.mixins.json  # Mixin registration
@@ -116,8 +124,8 @@ persistent-item-frames/
 │       ├── en_us.json                # English localization
 │       ├── es_es.json                # Spain Spanish localization (marcos, despawneen)
 │       └── es_mx.json                # Latin American Spanish localization (cuadros, render)
-├── build.gradle                      # Loom build script
-├── gradle.properties                 # Version (1.1.1+mc26), group (com.chino)
+├── build.gradle                      # Loom build script (main remapping plugin, Mojang mappings)
+├── gradle.properties                 # Version (1.1.4+mc1.21.11), group (com.chino)
 ├── README.md                         # Project pitch, companion mods, installation guide
 ├── ARCHITECTURE.md                   # Complete architectural guide & decisions for future agents
 └── LICENSE                           # Academic Free License (AFL 3.0) crediting Chino_47
@@ -130,6 +138,8 @@ persistent-item-frames/
 1. **Preserve AFL 3.0 Attribution**: Always maintain Chino_47 attribution in LICENSE and README.
 2. **Never Add Per-Tick Entity Physics**: Do not iterate through all loaded entities on `ClientTickEvents`. Keep checks packet-driven.
 3. **Respect Claim Protection**: Never eagerly discard frames on client interaction without server acknowledgment.
-4. **Minecraft Version Ports**: When porting to newer Minecraft releases (e.g. 26.3, 1.22+), only verify Mojmap mappings for:
+4. **Minecraft Version Ports**: When porting to other Minecraft releases, verify the Mojang mappings and *runtime namespace* for:
    * `ClientPacketListener` (`handleRemoveEntities`, `handleSoundEvent`, `handleSoundEntityEvent`, `handleAddEntity`, `handleSetEntityData`, `handleHurtAnimation`).
-   * `MultiPlayerGameMode` (`attack`, `interact`).
+   * `MultiPlayerGameMode` (`attack`, `interactAt`, `interact` — 1.21.11 splits right-click into `interactAt` + 3-arg `interact` fallback).
+   * The entity-extraction pipeline (`LevelRenderer#extractVisibleEntities` + `isSectionCompiledAndVisible` on 1.21.11; a separate `LevelExtractor` class on 26.x) and the entity-culling hook (`EntityRenderer#affectedByCulling`).
+   * Packaging: obfuscated versions (≤1.21.11) must ship intermediary-remapped annotations (Loom's remapping plugin + `officialMojangMappings()`); unobfuscated versions (26.x+) use the no-remap pipeline (`net.fabricmc.fabric-loom` plugin id) with Mojang names at runtime.

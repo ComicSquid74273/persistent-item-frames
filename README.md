@@ -2,7 +2,7 @@
 
 **Persistent Item Frames** is a lightweight, client-side mod that prevents item frames from disappearing prematurely when you walk away from them.
 
-Originally created by **Chino_47**, this is an updated and maintained port for modern Minecraft 26+ (Fabric).
+Originally created by **Chino_47**, this is an updated and maintained port for modern Minecraft (Fabric) — the `main` branch targets 26.x, this branch targets 1.21.11.
 
 ---
 
@@ -35,14 +35,14 @@ To prevent "ghost" or phantom frames from lingering when things actually break:
 * **[Distant Horizons](https://modrinth.com/mod/distanthorizons)** — Simplified LOD terrain
 * Any multiplayer server with low entity tracking distances
 
-**Good to know (26.x, v1.1.3+):** frames keep rendering even where Bobby/Distant Horizons draw cached or LOD terrain instead of real chunks — including in chunks the server has fully unloaded. Two limits remain: the wall must have been within the server's view distance **once per game session** (frames aren't cached to disk), and vanilla's entity render range caps visibility — raise *Video Settings → Entity Distance* to see frames further out.
+**Good to know (26.x v1.1.3+, 1.21.11 v1.1.4+):** frames keep rendering even where Bobby/Distant Horizons draw cached or LOD terrain instead of real chunks — including in chunks the server has fully unloaded. Two limits remain: the wall must have been within the server's view distance **once per game session** (frames aren't cached to disk), and vanilla's entity render range caps visibility — raise *Video Settings → Entity Distance* to see frames further out.
 
 ---
 
 ## Requirements & Installation
 
-1. **[Fabric Loader](https://fabricmc.net/)** (version `0.15.0+`)
-2. **Minecraft 26.1+** (Tested on `26.1.2` and `26.2`)
+1. **[Fabric Loader](https://fabricmc.net/)** (version `0.19.5+`)
+2. **Minecraft 1.21.11** (this branch targets `1.21.11` only — the [`main` branch](https://github.com/ComicSquid74273/persistent-item-frames) targets 26.x)
 3. Drop the `.jar` into your `.minecraft/mods` folder.
 
 *(100% client-side. No server installation required.)*

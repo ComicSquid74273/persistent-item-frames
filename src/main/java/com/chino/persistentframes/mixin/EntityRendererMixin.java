@@ -3,7 +3,7 @@ package com.chino.persistentframes.mixin;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.entity.EntityRenderer;
-import net.minecraft.util.LightCoordsUtil;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import org.spongepowered.asm.mixin.Mixin;
@@ -38,7 +38,7 @@ public abstract class EntityRendererMixin<T extends Entity> {
 
         LevelRenderer levelRenderer = Minecraft.getInstance().levelRenderer;
         if (levelRenderer != null && !levelRenderer.isSectionCompiledAndVisible(entity.blockPosition())) {
-            cir.setReturnValue(LightCoordsUtil.pack(0, 15));
+            cir.setReturnValue(LightTexture.pack(0, 15));
         }
     }
 }

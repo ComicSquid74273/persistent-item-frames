@@ -60,8 +60,10 @@ public final class PreservationGuard {
             return;
         }
         bannerShown = true;
-        if (client.gui != null && client.gui.hud != null) {
-            client.gui.hud.getChat().addClientSystemMessage(
+        // 1.21.11: no Gui.hud layer object; ChatComponent.addClientSystemMessage no longer exists
+        // there — Gui.getChat().addMessage(Component) is the same client-side (non-sent) chat line.
+        if (client.gui != null) {
+            client.gui.getChat().addMessage(
                     Component.literal("[Persistent Item Frames] active — frames will persist beyond server view distance")
                             .withStyle(ChatFormatting.GOLD));
         }

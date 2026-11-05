@@ -1,5 +1,8 @@
 plugins {
-    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+    // MC 1.21.11 is an obfuscated version: use the main remapping plugin, not the
+    // 'net.fabricmc.fabric-loom' no-remap alias (that one is for unobfuscated 26.x+ and
+    // skips mappings/remapJar, which would compile against raw obf classes and ship no refmap).
+    id 'fabric-loom' version "${loom_version}"
     id 'maven-publish'
 }
 
@@ -16,8 +19,14 @@ repositories {
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    
-    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // Dev-time named namespace = official Mojang names (the sources are written against them).
+    mappings loom.officialMojangMappings()
+
+    // modImplementation (not plain implementation): in the remap pipeline loom only reads the
+    // loader jar's fabric-installer.json from mod configurations; it injects sponge-mixin/asm
+    // (the org.spongepowered.asm.mixin compile classes) from there.
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     annotationProcessor "net.fabricmc:fabric-loader:${project.loader_version}"
 }
 
@@ -34,13 +43,13 @@ processResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-    it.options.release = 25
+    it.options.release = 21
 }
 
 java {
     withSourcesJar()
     toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 

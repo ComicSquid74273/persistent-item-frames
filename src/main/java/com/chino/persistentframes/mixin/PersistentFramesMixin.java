@@ -15,7 +15,7 @@ import net.minecraft.network.protocol.game.*;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -157,7 +157,7 @@ public abstract class PersistentFramesMixin {
     @Inject(method = "handleAddEntity", at = @At("HEAD"))
     private void onAddEntity(ClientboundAddEntityPacket packet, CallbackInfo ci) {
         cleanupUnacknowledgedInteractions();
-        if (packet.getType() == EntityTypes.ITEM) {
+        if (packet.getType() == EntityType.ITEM) {
             recordBreakPosition(packet.getX(), packet.getY(), packet.getZ());
         }
     }

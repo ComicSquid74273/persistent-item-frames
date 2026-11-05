@@ -1,11 +1,11 @@
 {
   "required": true,
   "package": "com.chino.persistentframes.mixin",
-  "compatibilityLevel": "JAVA_25",
+  "compatibilityLevel": "JAVA_21",
   "mixins": [
     "PersistentFramesMixin",
     "ItemFrameAttackMixin",
-    "LevelExtractorMixin",
+    "LevelRendererMixin",
     "EntityRendererMixin",
     "EntityRemovalGuardMixin",
     "ClientLevelMixin",
